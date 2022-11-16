@@ -6,7 +6,7 @@ Client side Requirements
 
 - sudo, or root access on your client machine.
   (The server doesn't need admin access.)
-- Python 3.6 or greater.
+- Python 3.8 or greater.
 
 
 Linux with NAT method
@@ -15,10 +15,12 @@ Supports:
 
 * IPv4 TCP
 * IPv4 DNS
+* IPv6 TCP
+* IPv6 DNS
 
 Requires:
 
-* iptables DNAT, REDIRECT, and ttl modules.
+* iptables DNAT and REDIRECT modules. ip6tables for IPv6.
 
 Linux with nft method
 ~~~~~~~~~~~~~~~~~~~~~
@@ -38,11 +40,11 @@ Linux with TPROXY method
 Supports:
 
 * IPv4 TCP
-* IPv4 UDP (requires ``recvmsg`` - see below)
-* IPv6 DNS (requires ``recvmsg`` - see below)
+* IPv4 UDP
+* IPv4 DNS
 * IPv6 TCP
-* IPv6 UDP (requires ``recvmsg`` - see below)
-* IPv6 DNS (requires ``recvmsg`` - see below)
+* IPv6 UDP
+* IPv6 DNS
 
 
 MacOS / FreeBSD / OpenBSD / pfSense
@@ -70,7 +72,7 @@ cmd.exe with Administrator access. See :doc:`windows` for more information.
 Server side Requirements
 ------------------------
 
-- Python 3.6 or greater.
+- Python 3.8 or greater.
 
 
 Additional Suggested Software
@@ -87,7 +89,7 @@ Additional Suggested Software
    [Unit]
    Description=tshuttle
    After=network.target
-   
+
    [Service]
    Type=notify
    ExecStart=/usr/bin/tshuttle --dns --remote <user>@<server> <subnets...>

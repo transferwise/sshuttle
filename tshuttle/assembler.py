@@ -1,8 +1,12 @@
 import sys
 import zlib
 import types
+import platform
 
 verbosity = verbosity  # noqa: F821 must be a previously defined global
+if verbosity > 0:
+    sys.stderr.write(' s: Running server on remote host with %s (version %s)\n'
+                     % (sys.executable, platform.python_version()))
 z = zlib.decompressobj()
 while 1:
     name = sys.stdin.readline().strip()
@@ -14,7 +18,7 @@ while 1:
             name = name.decode("ASCII")
         nbytes = int(sys.stdin.readline())
         if verbosity >= 2:
-            sys.stderr.write(' s: assembling %r (%d bytes)\n'
+            sys.stderr.write(' s: assembling %r (%d bytes)\r\n'
                              % (name, nbytes))
         content = z.decompress(sys.stdin.read(nbytes))
 

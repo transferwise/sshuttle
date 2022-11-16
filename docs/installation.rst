@@ -5,7 +5,7 @@ Installation
 
       pip install tshuttle
 
-- Debain package manager::
+- Debian package manager::
 
       sudo apt install tshuttle
 
@@ -19,6 +19,6 @@ Installation
 Optionally after installation
 -----------------------------
 
-- Add to sudoers file::
+- Install sudoers configuration. For details, see the "Sudoers File" section in :doc:`usage`
 
       tshuttle --sudoers

@@ -6,7 +6,6 @@ import subprocess as ssubprocess
 import os
 import sys
 import platform
-import psutil
 
 import tshuttle.helpers as helpers
 import tshuttle.ssnet as ssnet
@@ -23,19 +22,7 @@ try:
 except ImportError:
     getpwnam = None
 
-try:
-    # try getting recvmsg from python
-    import socket as pythonsocket
-    getattr(pythonsocket.socket, "recvmsg")
-    socket = pythonsocket
-except AttributeError:
-    # try getting recvmsg from socket_ext library
-    try:
-        import socket_ext
-        getattr(socket_ext.socket, "recvmsg")
-        socket = socket_ext
-    except ImportError:
-        import socket
+import socket
 
 _extra_fd = os.open(os.devnull, os.O_RDONLY)
 
@@ -45,6 +32,7 @@ def got_signal(signum, frame):
     sys.exit(1)
 
 
+# Filename of the pidfile created by the sshuttle client.
 _pidname = None
 
 
@@ -80,13 +68,25 @@ def check_daemon(pidfile):
 
 
 def daemonize():
+    # Try to open the pidfile prior to forking. If there is a problem,
+    # the client can then exit with a proper exit status code and
+    # message.
+    try:
+        outfd = os.open(_pidname, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o666)
+    except PermissionError:
+        # User will have to look in syslog for error message since
+        # --daemon implies --syslog, all output gets redirected to
+        # syslog.
+        raise Fatal("failed to create/write pidfile %s" % _pidname)
+
+    # Create a daemon process with a new session id.
     if os.fork():
         os._exit(0)
     os.setsid()
     if os.fork():
         os._exit(0)
 
-    outfd = os.open(_pidname, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o666)
+    # Write pid to the pidfile.
     try:
         os.write(outfd, b'%d\n' % os.getpid())
     finally:
@@ -123,14 +123,14 @@ class MultiListener:
         self.bind_called = False
 
     def setsockopt(self, level, optname, value):
-        assert(self.bind_called)
+        assert self.bind_called
         if self.v6:
             self.v6.setsockopt(level, optname, value)
         if self.v4:
             self.v4.setsockopt(level, optname, value)
 
     def add_handler(self, handlers, callback, method, mux):
-        assert(self.bind_called)
+        assert self.bind_called
         socks = []
         if self.v6:
             socks.append(self.v6)
@@ -145,14 +145,14 @@ class MultiListener:
         )
 
     def listen(self, backlog):
-        assert(self.bind_called)
+        assert self.bind_called
         if self.v6:
             self.v6.listen(backlog)
         if self.v4:
             try:
                 self.v4.listen(backlog)
             except socket.error as e:
-                # on some systems v4 bind will fail if the v6 suceeded,
+                # on some systems v4 bind will fail if the v6 succeeded,
                 # in this case the v6 socket will receive v4 too.
                 if e.errno == errno.EADDRINUSE and self.v6:
                     self.v4 = None
@@ -160,11 +160,26 @@ class MultiListener:
                     raise e
 
     def bind(self, address_v6, address_v4):
-        assert(not self.bind_called)
+        assert not self.bind_called
         self.bind_called = True
         if address_v6 is not None:
             self.v6 = socket.socket(socket.AF_INET6, self.type, self.proto)
-            self.v6.bind(address_v6)
+            try:
+                self.v6.bind(address_v6)
+            except OSError as e:
+                if e.errno == errno.EADDRNOTAVAIL:
+                    # On an IPv6 Linux machine, this situation occurs
+                    # if you run the following prior to running
+                    # sshuttle:
+                    #
+                    # echo 1 > /proc/sys/net/ipv6/conf/all/disable_ipv6
+                    # echo 1 > /proc/sys/net/ipv6/conf/default/disable_ipv6
+                    raise Fatal("Could not bind to an IPv6 socket with "
+                                "address %s and port %s. "
+                                "Potential workaround: Run sshuttle "
+                                "with '--disable-ipv6'."
+                                % (str(address_v6[0]), str(address_v6[1])))
+                raise e
         else:
             self.v6 = None
         if address_v4 is not None:
@@ -174,7 +189,7 @@ class MultiListener:
             self.v4 = None
 
     def print_listening(self, what):
-        assert(self.bind_called)
+        assert self.bind_called
         if self.v6:
             listenip = self.v6.getsockname()
             debug1('%s listening on %r.' % (what, listenip))
@@ -189,7 +204,7 @@ class FirewallClient:
 
     def __init__(self, method_name, sudo_pythonpath):
         self.auto_nets = []
-        python_path = os.path.dirname(os.path.dirname(__file__))
+
         argvbase = ([sys.executable, sys.argv[0]] +
                     ['-v'] * (helpers.verbose or 0) +
                     ['--method', method_name] +
@@ -197,54 +212,106 @@ class FirewallClient:
         if ssyslog._p:
             argvbase += ['--syslog']
 
-        # Determine how to prefix the command in order to elevate privileges.
-        if platform.platform().startswith('OpenBSD'):
-            elev_prefix = ['doas']  # OpenBSD uses built in `doas`
+        # A list of commands that we can try to run to start the firewall.
+        argv_tries = []
+
+        if os.getuid() == 0:  # No need to elevate privileges
+            argv_tries.append(argvbase)
         else:
-            elev_prefix = ['sudo', '-p', '[local sudo] Password: ']
+            # Linux typically uses sudo; OpenBSD uses doas. However, some
+            # Linux distributions are starting to use doas.
+            sudo_cmd = ['sudo', '-p', '[local sudo] Password: ']
+            doas_cmd = ['doas']
 
-        # Look for binary and switch to absolute path if we can find
-        # it.
-        path = which(elev_prefix[0])
-        if path:
-            elev_prefix[0] = path
+            # For clarity, try to replace executable name with the
+            # full path.
+            doas_path = which("doas")
+            if doas_path:
+                doas_cmd[0] = doas_path
+            sudo_path = which("sudo")
+            if sudo_path:
+                sudo_cmd[0] = sudo_path
 
-        if sudo_pythonpath:
-            elev_prefix += ['/usr/bin/env',
-                            'PYTHONPATH=%s' % python_path]
-        argv_tries = [elev_prefix + argvbase, argvbase]
+            # sudo_pythonpath indicates if we should set the
+            # PYTHONPATH environment variable when elevating
+            # privileges. This can be adjusted with the
+            # --no-sudo-pythonpath option.
+            if sudo_pythonpath:
+                pp_prefix = ['/usr/bin/env',
+                             'PYTHONPATH=%s' %
+                             os.path.dirname(os.path.dirname(__file__))]
+                sudo_cmd = sudo_cmd + pp_prefix
+                doas_cmd = doas_cmd + pp_prefix
 
-        # we can't use stdin/stdout=subprocess.PIPE here, as we normally would,
-        # because stupid Linux 'su' requires that stdin be attached to a tty.
-        # Instead, attach a *bidirectional* socket to its stdout, and use
-        # that for talking in both directions.
-        (s1, s2) = socket.socketpair()
+            # Final order should be: sudo/doas command, env
+            # pythonpath, and then argvbase (sshuttle command).
+            sudo_cmd = sudo_cmd + argvbase
+            doas_cmd = doas_cmd + argvbase
 
-        def setup():
-            # run in the child process
-            s2.close()
-        if os.getuid() == 0:
-            argv_tries = argv_tries[-1:]  # last entry only
+            # If we can find doas and not sudo or if we are on
+            # OpenBSD, try using doas first.
+            if (doas_path and not sudo_path) or \
+               platform.platform().startswith('OpenBSD'):
+                argv_tries = [doas_cmd, sudo_cmd, argvbase]
+            else:
+                argv_tries = [sudo_cmd, doas_cmd, argvbase]
+
+        # Try all commands in argv_tries in order. If a command
+        # produces an error, try the next one. If command is
+        # successful, set 'success' variable and break.
+        success = False
         for argv in argv_tries:
+            # we can't use stdin/stdout=subprocess.PIPE here, as we
+            # normally would, because stupid Linux 'su' requires that
+            # stdin be attached to a tty. Instead, attach a
+            # *bidirectional* socket to its stdout, and use that for
+            # talking in both directions.
+            (s1, s2) = socket.socketpair()
+
+            def setup():
+                # run in the child process
+                s2.close()
+
             try:
-                if argv[0] == 'su':
-                    sys.stderr.write('[local su] ')
+                debug1("Starting firewall manager with command: %r" % argv)
                 self.p = ssubprocess.Popen(argv, stdout=s1, preexec_fn=setup)
                 # No env: Talking to `FirewallClient.start`, which has no i18n.
-                break
             except OSError as e:
-                log('Spawning firewall manager: %r' % argv)
-                raise Fatal(e)
-        self.argv = argv
-        s1.close()
-        self.pfile = s2.makefile('rwb')
-        line = self.pfile.readline()
-        self.check()
-        if line[0:5] != b'READY':
-            raise Fatal('%r expected READY, got %r' % (self.argv, line))
-        method_name = line[6:-1]
-        self.method = get_method(method_name.decode("ASCII"))
-        self.method.set_firewall(self)
+                # This exception will occur if the program isn't
+                # present or isn't executable.
+                debug1('Unable to start firewall manager. Popen failed. '
+                       'Command=%r Exception=%s' % (argv, e))
+                continue
+
+            self.argv = argv
+            s1.close()
+            self.pfile = s2.makefile('rwb')
+            line = self.pfile.readline()
+
+            rv = self.p.poll()   # Check if process is still running
+            if rv:
+                # We might get here if program runs and exits before
+                # outputting anything. For example, someone might have
+                # entered the wrong password to elevate privileges.
+                debug1('Unable to start firewall manager. '
+                       'Process exited too early. '
+                       '%r returned %d' % (self.argv, rv))
+                continue
+
+            if line[0:5] != b'READY':
+                debug1('Unable to start firewall manager. '
+                       'Expected READY, got %r. '
+                       'Command=%r' % (line, self.argv))
+                continue
+
+            method_name = line[6:-1]
+            self.method = get_method(method_name.decode("ASCII"))
+            self.method.set_firewall(self)
+            success = True
+            break
+
+        if not success:
+            raise Fatal("All attempts to elevate privileges failed.")
 
     def setup(self, subnets_include, subnets_exclude, nslist,
               redirectport_v6, redirectport_v4, dnsport_v6, dnsport_v4, udp,
@@ -297,7 +364,8 @@ class FirewallClient:
         else:
             user = b'%d' % self.user
 
-        self.pfile.write(b'GO %d %s\n' % (udp, user))
+        self.pfile.write(b'GO %d %s %s %d\n' %
+                         (udp, user, bytes(self.tmark, 'ascii'), os.getpid()))
         self.pfile.flush()
 
         line = self.pfile.readline()
@@ -306,8 +374,8 @@ class FirewallClient:
             raise Fatal('%r expected STARTED, got %r' % (self.argv, line))
 
     def sethostip(self, hostname, ip):
-        assert(not re.search(br'[^-\w\.]', hostname))
-        assert(not re.search(br'[^0-9.]', ip))
+        assert not re.search(br'[^-\w\.]', hostname)
+        assert not re.search(br'[^0-9.]', ip)
         self.pfile.write(b'HOST %s,%s\n' % (hostname, ip))
         self.pfile.flush()
 
@@ -571,6 +639,7 @@ def _main(tcp_listener, udp_listener, fw, ssh_cmd, remotename,
                     % (expected, initstring))
     log('Connected to server.')
     sys.stdout.flush()
+
     if daemon:
         daemonize()
         log('daemonizing (%s).' % _pidname)
@@ -633,7 +702,9 @@ def _main(tcp_listener, udp_listener, fw, ssh_cmd, remotename,
             # poll() won't tell us when process exited since the
             # process is no longer our child (it returns 0 all the
             # time).
-            if not psutil.pid_exists(serverproc.pid):
+            try:
+                os.kill(serverproc.pid, 0)
+            except OSError:
                 raise Fatal('ssh connection to server (pid %d) exited.' %
                             serverproc.pid)
         else:
@@ -658,9 +729,8 @@ def main(listenip_v6, listenip_v4,
          user, sudo_pythonpath, tmark):
 
     if not remotename:
-        print("WARNING: You must specify -r/--remote to securely route "
-              "traffic to a remote machine. Running without -r/--remote "
-              "is only recommended for testing.")
+        raise Fatal("You must use -r/--remote to specify a remote "
+                    "host to route traffic through.")
 
     if daemon:
         try:
@@ -673,19 +743,26 @@ def main(listenip_v6, listenip_v4,
 
     fw = FirewallClient(method_name, sudo_pythonpath)
 
-    # If --dns is used, store the IP addresses that the client
-    # normally uses for DNS lookups in nslist. The firewall needs to
-    # redirect packets outgoing to this server to the remote host
+    # nslist is the list of name severs to intercept. If --dns is
+    # used, we add all DNS servers in resolv.conf. Otherwise, the list
+    # can be populated with the --ns-hosts option (which is already
+    # stored in nslist). This list is used to setup the firewall so it
+    # can redirect packets outgoing to this server to the remote host
     # instead.
     if dns:
         nslist += resolvconf_nameservers(True)
+
+    # If we are intercepting DNS requests, we tell the remote host
+    # where it should send the DNS requests to with the --to-ns
+    # option.
+    if len(nslist) > 0:
         if to_nameserver is not None:
             to_nameserver = "%s@%s" % tuple(to_nameserver[1:])
-    else:
-        # option doesn't make sense if we aren't proxying dns
+    else:  # if we are not intercepting DNS traffic
+        # ...and the user specified a server to send DNS traffic to.
         if to_nameserver and len(to_nameserver) > 0:
-            print("WARNING: --to-ns option is ignored because --dns was not "
-                  "used.")
+            print("WARNING: --to-ns option is ignored unless "
+                  "--dns or --ns-hosts is used.")
         to_nameserver = None
 
     # Get family specific subnet lists. Also, the user may not specify
@@ -896,7 +973,7 @@ def main(listenip_v6, listenip_v4,
                 raise e
 
     if not bound:
-        assert(last_e)
+        assert last_e
         raise last_e
     tcp_listener.listen(10)
     tcp_listener.print_listening("TCP redirector")
@@ -942,7 +1019,7 @@ def main(listenip_v6, listenip_v4,
 
         dns_listener.print_listening("DNS")
         if not bound:
-            assert(last_e)
+            assert last_e
             raise last_e
     else:
         dnsport_v6 = 0

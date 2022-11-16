@@ -227,7 +227,7 @@ class SockWrapper:
                 return 0
 
     def write(self, buf):
-        assert(buf)
+        assert buf
         return self.uwrite(buf)
 
     def uread(self):
@@ -402,15 +402,15 @@ class Mux(Handler):
         elif cmd == CMD_EXIT:
             self.ok = False
         elif cmd == CMD_TCP_CONNECT:
-            assert(not self.channels.get(channel))
+            assert not self.channels.get(channel)
             if self.new_channel:
                 self.new_channel(channel, data)
         elif cmd == CMD_DNS_REQ:
-            assert(not self.channels.get(channel))
+            assert not self.channels.get(channel)
             if self.got_dns_req:
                 self.got_dns_req(channel, data)
         elif cmd == CMD_UDP_OPEN:
-            assert(not self.channels.get(channel))
+            assert not self.channels.get(channel)
             if self.got_udp_open:
                 self.got_udp_open(channel, data)
         elif cmd == CMD_ROUTES:
@@ -443,7 +443,7 @@ class Mux(Handler):
             # python < 3.5
             flags = fcntl.fcntl(self.wfile.fileno(), fcntl.F_GETFL)
             flags |= os.O_NONBLOCK
-            flags = fcntl.fcntl(self.wfile.fileno(), fcntl.F_SETFL, flags)
+            fcntl.fcntl(self.wfile.fileno(), fcntl.F_SETFL, flags)
         if self.outbuf and self.outbuf[0]:
             wrote = _nb_clean(os.write, self.wfile.fileno(), self.outbuf[0])
             debug2('mux wrote: %r/%d' % (wrote, len(self.outbuf[0])))
@@ -459,7 +459,7 @@ class Mux(Handler):
             # python < 3.5
             flags = fcntl.fcntl(self.rfile.fileno(), fcntl.F_GETFL)
             flags |= os.O_NONBLOCK
-            flags = fcntl.fcntl(self.rfile.fileno(), fcntl.F_SETFL, flags)
+            fcntl.fcntl(self.rfile.fileno(), fcntl.F_SETFL, flags)
         try:
             # If LATENCY_BUFFER_SIZE is inappropriately large, we will
             # get a MemoryError here. Read no more than 1MiB.
@@ -482,8 +482,8 @@ class Mux(Handler):
             if len(self.inbuf) >= (self.want or HDR_LEN):
                 (s1, s2, channel, cmd, datalen) = \
                     struct.unpack('!ccHHH', self.inbuf[:HDR_LEN])
-                assert(s1 == b('S'))
-                assert(s2 == b('S'))
+                assert s1 == b('S')
+                assert s2 == b('S')
                 self.want = datalen + HDR_LEN
             if self.want and len(self.inbuf) >= self.want:
                 data = self.inbuf[HDR_LEN:self.want]
@@ -586,7 +586,7 @@ class MuxWrapper(SockWrapper):
 def connect_dst(family, ip, port):
     debug2('Connecting to %s:%d' % (ip, port))
     outsock = socket.socket(family)
-    outsock.setsockopt(socket.SOL_IP, socket.IP_TTL, 63)
+
     return SockWrapper(outsock, outsock,
                        connect_to=(ip, port),
                        peername='%s:%d' % (ip, port))

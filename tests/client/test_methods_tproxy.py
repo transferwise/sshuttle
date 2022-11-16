@@ -6,22 +6,12 @@ from unittest.mock import Mock, patch, call
 from tshuttle.methods import get_method
 
 
-@patch("tshuttle.methods.tproxy.recvmsg")
-def test_get_supported_features_recvmsg(mock_recvmsg):
+def test_get_supported_features():
     method = get_method('tproxy')
     features = method.get_supported_features()
     assert features.ipv6
     assert features.udp
     assert features.dns
-
-
-@patch("tshuttle.methods.tproxy.recvmsg", None)
-def test_get_supported_features_norecvmsg():
-    method = get_method('tproxy')
-    features = method.get_supported_features()
-    assert features.ipv6
-    assert not features.udp
-    assert not features.dns
 
 
 def test_get_tcp_dstip():
@@ -88,11 +78,10 @@ def test_assert_features():
 
 def test_firewall_command():
     method = get_method('tproxy')
-    assert not method.firewall_command("somthing")
+    assert not method.firewall_command("something")
 
 
 @patch('tshuttle.methods.tproxy.ipt')
-@patch('tshuttle.methods.tproxy.ipt_ttl')
 @patch('tshuttle.methods.tproxy.ipt_chain_exists')
 def test_setup_firewall(mock_ipt_chain_exists, mock_ipt_ttl, mock_ipt):
     mock_ipt_chain_exists.return_value = True
@@ -108,13 +97,13 @@ def test_setup_firewall(mock_ipt_chain_exists, mock_ipt_ttl, mock_ipt):
         [(AF_INET6, 64, False, u'2404:6800:4004:80c::', 8000, 9000),
             (AF_INET6, 128, True, u'2404:6800:4004:80c::101f', 8080, 8080)],
         True,
-        None)
+        None,
+        '0x01')
     assert mock_ipt_chain_exists.mock_calls == [
         call(AF_INET6, 'mangle', 'tshuttle-m-1024'),
         call(AF_INET6, 'mangle', 'tshuttle-t-1024'),
         call(AF_INET6, 'mangle', 'tshuttle-d-1024')
     ]
-    assert mock_ipt_ttl.mock_calls == []
     assert mock_ipt.mock_calls == [
         call(AF_INET6, 'mangle', '-D', 'OUTPUT', '-j', 'tshuttle-m-1024'),
         call(AF_INET6, 'mangle', '-F', 'tshuttle-m-1024'),
@@ -179,7 +168,6 @@ def test_setup_firewall(mock_ipt_chain_exists, mock_ipt_ttl, mock_ipt):
              '--on-port', '1024')
     ]
     mock_ipt_chain_exists.reset_mock()
-    mock_ipt_ttl.reset_mock()
     mock_ipt.reset_mock()
 
     method.restore_firewall(1025, AF_INET6, True, None)
@@ -188,7 +176,6 @@ def test_setup_firewall(mock_ipt_chain_exists, mock_ipt_ttl, mock_ipt):
         call(AF_INET6, 'mangle', 'tshuttle-t-1025'),
         call(AF_INET6, 'mangle', 'tshuttle-d-1025')
     ]
-    assert mock_ipt_ttl.mock_calls == []
     assert mock_ipt.mock_calls == [
         call(AF_INET6, 'mangle', '-D', 'OUTPUT', '-j', 'tshuttle-m-1025'),
         call(AF_INET6, 'mangle', '-F', 'tshuttle-m-1025'),
@@ -200,7 +187,6 @@ def test_setup_firewall(mock_ipt_chain_exists, mock_ipt_ttl, mock_ipt):
         call(AF_INET6, 'mangle', '-X', 'tshuttle-d-1025')
     ]
     mock_ipt_chain_exists.reset_mock()
-    mock_ipt_ttl.reset_mock()
     mock_ipt.reset_mock()
 
     # IPV4
@@ -212,13 +198,13 @@ def test_setup_firewall(mock_ipt_chain_exists, mock_ipt_ttl, mock_ipt):
         [(AF_INET, 24, False, u'1.2.3.0', 0, 0),
             (AF_INET, 32, True, u'1.2.3.66', 80, 80)],
         True,
-        None)
+        None,
+        '0x01')
     assert mock_ipt_chain_exists.mock_calls == [
         call(AF_INET, 'mangle', 'tshuttle-m-1025'),
         call(AF_INET, 'mangle', 'tshuttle-t-1025'),
         call(AF_INET, 'mangle', 'tshuttle-d-1025')
     ]
-    assert mock_ipt_ttl.mock_calls == []
     assert mock_ipt.mock_calls == [
         call(AF_INET, 'mangle', '-D', 'OUTPUT', '-j', 'tshuttle-m-1025'),
         call(AF_INET, 'mangle', '-F', 'tshuttle-m-1025'),
@@ -280,7 +266,6 @@ def test_setup_firewall(mock_ipt_chain_exists, mock_ipt_ttl, mock_ipt):
              '-m', 'udp', '-p', 'udp', '--on-port', '1025')
     ]
     mock_ipt_chain_exists.reset_mock()
-    mock_ipt_ttl.reset_mock()
     mock_ipt.reset_mock()
 
     method.restore_firewall(1025, AF_INET, True, None)
@@ -289,7 +274,6 @@ def test_setup_firewall(mock_ipt_chain_exists, mock_ipt_ttl, mock_ipt):
         call(AF_INET, 'mangle', 'tshuttle-t-1025'),
         call(AF_INET, 'mangle', 'tshuttle-d-1025')
     ]
-    assert mock_ipt_ttl.mock_calls == []
     assert mock_ipt.mock_calls == [
         call(AF_INET, 'mangle', '-D', 'OUTPUT', '-j', 'tshuttle-m-1025'),
         call(AF_INET, 'mangle', '-F', 'tshuttle-m-1025'),
@@ -301,5 +285,4 @@ def test_setup_firewall(mock_ipt_chain_exists, mock_ipt_ttl, mock_ipt):
         call(AF_INET, 'mangle', '-X', 'tshuttle-d-1025')
     ]
     mock_ipt_chain_exists.reset_mock()
-    mock_ipt_ttl.reset_mock()
     mock_ipt.reset_mock()
