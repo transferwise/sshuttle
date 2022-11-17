@@ -21,9 +21,9 @@ from setuptools import setup, find_packages
 
 
 setup(
-    name="sshuttle",
+    name="tshuttle",
     version='1.1.1',
-    url='https://github.com/sshuttle/sshuttle',
+    url='https://github.com/transferwise/tshuttle',
     author='Brian May',
     author_email='brian@linuxpenguins.xyz',
     description='Full-featured" VPN over an SSH tunnel',
