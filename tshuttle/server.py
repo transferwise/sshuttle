@@ -5,7 +5,6 @@ import traceback
 import time
 import sys
 import os
-import platform
 
 
 import tshuttle.ssnet as ssnet
@@ -35,7 +34,6 @@ def _ipmatch(ipstr):
         elif g[3] is None:
             ips += '.0'
             width = min(width, 24)
-        ips = ips
         return (struct.unpack('!I', socket.inet_aton(ips))[0], width)
 
 
@@ -191,7 +189,6 @@ class DnsProxy(Handler):
 
         family, sockaddr = self._addrinfo(peer, port)
         sock = socket.socket(family, socket.SOCK_DGRAM)
-        sock.setsockopt(socket.SOL_IP, socket.IP_TTL, 63)
         sock.connect(sockaddr)
 
         self.peers[sock] = peer
@@ -247,8 +244,6 @@ class UdpProxy(Handler):
         self.mux = mux
         self.chan = chan
         self.sock = sock
-        if family == socket.AF_INET:
-            self.sock.setsockopt(socket.SOL_IP, socket.IP_TTL, 63)
 
     def send(self, dstip, data):
         debug2('UDP: sending to %r port %d' % dstip)
@@ -275,8 +270,6 @@ def main(latency_control, latency_buffer_size, auto_hosts, to_nameserver,
          auto_nets):
     try:
         helpers.logprefix = ' s: '
-        debug1('Starting server with Python version %s'
-               % platform.python_version())
 
         debug1('latency control setting = %r' % latency_control)
         if latency_buffer_size:
@@ -309,7 +302,7 @@ def main(latency_control, latency_buffer_size, auto_hosts, to_nameserver,
         hw.leftover = b('')
 
         def hostwatch_ready(sock):
-            assert(hw.pid)
+            assert hw.pid
             content = hw.sock.recv(4096)
             if content:
                 lines = (hw.leftover + content).split(b('\n'))
@@ -387,7 +380,7 @@ def main(latency_control, latency_buffer_size, auto_hosts, to_nameserver,
 
         while mux.ok:
             if hw.pid:
-                assert(hw.pid > 0)
+                assert hw.pid > 0
                 (rpid, rv) = os.waitpid(hw.pid, os.WNOHANG)
                 if rpid:
                     raise Fatal(

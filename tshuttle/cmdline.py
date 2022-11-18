@@ -1,6 +1,5 @@
 import re
 import socket
-import platform
 import tshuttle.helpers as helpers
 import tshuttle.client as client
 import tshuttle.firewall as firewall
@@ -14,20 +13,9 @@ from tshuttle.sudoers import sudoers
 def main():
     opt = parser.parse_args()
 
-    if opt.sudoers or opt.sudoers_no_modify:
-        if platform.platform().startswith('OpenBSD'):
-            log('Automatic sudoers does not work on BSD')
-            return 1
-
-        if not opt.sudoers_filename:
-            log('--sudoers-file must be set or omited.')
-            return 1
-
-        sudoers(
-            user_name=opt.sudoers_user,
-            no_modify=opt.sudoers_no_modify,
-            file_name=opt.sudoers_filename
-        )
+    if opt.sudoers_no_modify:
+        # sudoers() calls exit() when it completes
+        sudoers(user_name=opt.sudoers_user)
 
     if opt.daemon:
         opt.syslog = 1
@@ -45,7 +33,8 @@ def main():
                 parser.error('exactly zero arguments expected')
             return firewall.main(opt.method, opt.syslog)
         elif opt.hostwatch:
-            return hostwatch.hw_main(opt.subnets, opt.auto_hosts)
+            hostwatch.hw_main(opt.subnets, opt.auto_hosts)
+            return 0
         else:
             # parse_subnetports() is used to create a list of includes
             # and excludes. It is called once for each parameter and
@@ -85,6 +74,13 @@ def main():
                 ipport_v4 = "auto"
                 # parse_ipport6('[::1]:0')
                 ipport_v6 = "auto" if not opt.disable_ipv6 else None
+            try:
+                int(opt.tmark, 16)
+            except ValueError:
+                parser.error("--tmark must be a hexadecimal value")
+            opt.tmark = opt.tmark.lower()   # make 'x' in 0x lowercase
+            if not opt.tmark.startswith("0x"):  # accept without 0x prefix
+                opt.tmark = "0x%s" % opt.tmark
             if opt.syslog:
                 ssyslog.start_syslog()
                 ssyslog.close_stdin()

@@ -92,7 +92,7 @@ def test_assert_features():
 @patch('tshuttle.methods.pf.pf_get_dev')
 def test_firewall_command_darwin(mock_pf_get_dev, mock_ioctl, mock_stdout):
     method = get_method('pf')
-    assert not method.firewall_command("somthing")
+    assert not method.firewall_command("something")
 
     command = "QUERY_PF_NAT %d,%d,%s,%d,%s,%d\n" % (
         AF_INET, socket.IPPROTO_TCP,
@@ -115,7 +115,7 @@ def test_firewall_command_darwin(mock_pf_get_dev, mock_ioctl, mock_stdout):
 @patch('tshuttle.methods.pf.pf_get_dev')
 def test_firewall_command_freebsd(mock_pf_get_dev, mock_ioctl, mock_stdout):
     method = get_method('pf')
-    assert not method.firewall_command("somthing")
+    assert not method.firewall_command("something")
 
     command = "QUERY_PF_NAT %d,%d,%s,%d,%s,%d\n" % (
         AF_INET, socket.IPPROTO_TCP,
@@ -138,7 +138,7 @@ def test_firewall_command_freebsd(mock_pf_get_dev, mock_ioctl, mock_stdout):
 @patch('tshuttle.methods.pf.pf_get_dev')
 def test_firewall_command_openbsd(mock_pf_get_dev, mock_ioctl, mock_stdout):
     method = get_method('pf')
-    assert not method.firewall_command("somthing")
+    assert not method.firewall_command("something")
 
     command = "QUERY_PF_NAT %d,%d,%s,%d,%s,%d\n" % (
         AF_INET, socket.IPPROTO_TCP,
@@ -186,7 +186,8 @@ def test_setup_firewall_darwin(mock_pf_get_dev, mock_ioctl, mock_pfctl):
         [(AF_INET6, 64, False, u'2404:6800:4004:80c::', 8000, 9000),
             (AF_INET6, 128, True, u'2404:6800:4004:80c::101f', 8080, 8080)],
         False,
-        None)
+        None,
+        '0x01')
     assert mock_ioctl.mock_calls == [
         call(mock_pf_get_dev(), 0xC4704433, ANY),
         call(mock_pf_get_dev(), 0xCC20441A, ANY),
@@ -225,7 +226,8 @@ def test_setup_firewall_darwin(mock_pf_get_dev, mock_ioctl, mock_pfctl):
             [(AF_INET, 24, False, u'1.2.3.0', 0, 0),
                 (AF_INET, 32, True, u'1.2.3.66', 80, 80)],
             True,
-            None)
+            None,
+            '0x01')
     assert str(excinfo.value) == 'UDP not supported by pf method_name'
     assert mock_pf_get_dev.mock_calls == []
     assert mock_ioctl.mock_calls == []
@@ -238,7 +240,8 @@ def test_setup_firewall_darwin(mock_pf_get_dev, mock_ioctl, mock_pfctl):
         [(AF_INET, 24, False, u'1.2.3.0', 0, 0),
             (AF_INET, 32, True, u'1.2.3.66', 80, 80)],
         False,
-        None)
+        None,
+        '0x01')
     assert mock_ioctl.mock_calls == [
         call(mock_pf_get_dev(), 0xC4704433, ANY),
         call(mock_pf_get_dev(), 0xCC20441A, ANY),
@@ -298,7 +301,8 @@ def test_setup_firewall_freebsd(mock_pf_get_dev, mock_ioctl, mock_pfctl,
         [(AF_INET6, 64, False, u'2404:6800:4004:80c::', 8000, 9000),
             (AF_INET6, 128, True, u'2404:6800:4004:80c::101f', 8080, 8080)],
         False,
-        None)
+        None,
+        '0x01')
 
     assert mock_pfctl.mock_calls == [
         call('-s all'),
@@ -330,7 +334,8 @@ def test_setup_firewall_freebsd(mock_pf_get_dev, mock_ioctl, mock_pfctl,
             [(AF_INET, 24, False, u'1.2.3.0', 0, 0),
                 (AF_INET, 32, True, u'1.2.3.66', 80, 80)],
             True,
-            None)
+            None,
+            '0x01')
     assert str(excinfo.value) == 'UDP not supported by pf method_name'
     assert mock_pf_get_dev.mock_calls == []
     assert mock_ioctl.mock_calls == []
@@ -343,7 +348,8 @@ def test_setup_firewall_freebsd(mock_pf_get_dev, mock_ioctl, mock_pfctl,
         [(AF_INET, 24, False, u'1.2.3.0', 0, 0),
             (AF_INET, 32, True, u'1.2.3.66', 80, 80)],
         False,
-        None)
+        None,
+        '0x01')
     assert mock_ioctl.mock_calls == [
         call(mock_pf_get_dev(), 0xC4704433, ANY),
         call(mock_pf_get_dev(), 0xCBE0441A, ANY),
@@ -401,7 +407,8 @@ def test_setup_firewall_openbsd(mock_pf_get_dev, mock_ioctl, mock_pfctl):
         [(AF_INET6, 64, False, u'2404:6800:4004:80c::', 8000, 9000),
             (AF_INET6, 128, True, u'2404:6800:4004:80c::101f', 8080, 8080)],
         False,
-        None)
+        None,
+        '0x01')
 
     assert mock_ioctl.mock_calls == [
         call(mock_pf_get_dev(), 0xcd60441a, ANY),
@@ -437,7 +444,8 @@ def test_setup_firewall_openbsd(mock_pf_get_dev, mock_ioctl, mock_pfctl):
             [(AF_INET, 24, False, u'1.2.3.0', 0, 0),
                 (AF_INET, 32, True, u'1.2.3.66', 80, 80)],
             True,
-            None)
+            None,
+            '0x01')
     assert str(excinfo.value) == 'UDP not supported by pf method_name'
     assert mock_pf_get_dev.mock_calls == []
     assert mock_ioctl.mock_calls == []
@@ -450,7 +458,8 @@ def test_setup_firewall_openbsd(mock_pf_get_dev, mock_ioctl, mock_pfctl):
         [(AF_INET, 24, False, u'1.2.3.0', 0, 0),
             (AF_INET, 32, True, u'1.2.3.66', 80, 80)],
         False,
-        None)
+        None,
+        '0x01')
     assert mock_ioctl.mock_calls == [
         call(mock_pf_get_dev(), 0xcd60441a, ANY),
         call(mock_pf_get_dev(), 0xcd60441a, ANY),

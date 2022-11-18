@@ -31,22 +31,23 @@ Options
 .. option:: <subnets>
 
     A list of subnets to route over the VPN, in the form
-    ``a.b.c.d[/width][port[-port]]``.  Valid examples are 1.2.3.4 (a
-    single IP address), 1.2.3.4/32 (equivalent to 1.2.3.4),
-    1.2.3.0/24 (a 24-bit subnet, ie. with a 255.255.255.0
-    netmask), and 0/0 ('just route everything through the
-    VPN'). Any of the previous examples are also valid if you append
-    a port or a port range, so 1.2.3.4:8000 will only tunnel traffic
-    that has as the destination port 8000 of 1.2.3.4 and
-    1.2.3.0/24:8000-9000 will tunnel traffic going to any port between
-    8000 and 9000 (inclusive) for all IPs in the 1.2.3.0/24 subnet.
-    A hostname can be provided instead of an IP address. If the
-    hostname resolves to multiple IPs, all of the IPs are included.
-    If a width is provided with a hostname that the width is applied
-    to all of the hostnames IPs (if they are all either IPv4 or IPv6).
-    Widths cannot be supplied to hostnames that resolve to both IPv4
-    and IPv6. Valid examples are example.com, example.com:8000,
-    example.com/24, example.com/24:8000 and example.com:8000-9000.
+    ``a.b.c.d[/width][port[-port]]``. Valid examples are 1.2.3.4 (a
+    single IP address) and 1.2.3.4/32 (equivalent to 1.2.3.4),
+    1.2.3.0/24 (a 24-bit subnet, ie. with a 255.255.255.0 netmask).
+    Specify subnets 0/0 to match all IPv4 addresses and ::/0 to match
+    all IPv6 addresses. Any of the previous examples are also valid if
+    you append a port or a port range, so 1.2.3.4:8000 will only
+    tunnel traffic that has as the destination port 8000 of 1.2.3.4
+    and 1.2.3.0/24:8000-9000 will tunnel traffic going to any port
+    between 8000 and 9000 (inclusive) for all IPs in the 1.2.3.0/24
+    subnet. A hostname can be provided instead of an IP address. If
+    the hostname resolves to multiple IPs, all of the IPs are
+    included. If a width is provided with a hostname, the width is
+    applied to all of the hostnames IPs (if they are all either IPv4
+    or IPv6). Widths cannot be supplied to hostnames that resolve to
+    both IPv4 and IPv6. Valid examples are example.com,
+    example.com:8000, example.com/24, example.com/24:8000 and
+    example.com:8000-9000.
 
 .. option:: --method <auto|nat|nft|tproxy|pf|ipfw>
 
@@ -68,8 +69,8 @@ Options
     You can use any name resolving to an IP address of the machine running
     :program:`tshuttle`, e.g. ``--listen localhost``.
 
-    For the nft, tproxy and pf methods this can be an IPv6 address. Use 
-    this option with comma separated values if required, to provide both 
+    For the nft, tproxy and pf methods this can be an IPv6 address. Use
+    this option with comma separated values if required, to provide both
     IPv4 and IPv6 addresses, e.g. ``--listen 127.0.0.1:0,[::1]:0``.
 
 .. option:: -H, --auto-hosts
@@ -88,6 +89,13 @@ Options
     few subnets over the VPN, you probably would prefer to
     keep using your local DNS server for everything else.
 
+    :program:`sshuttle` tries to store a cache of the hostnames in
+    ~/.sshuttle.hosts on the remote host. Similarly, it tries to read
+    the file when you later reconnect to the host with --auto-hosts
+    enabled to quickly populate the host list. When troubleshooting
+    this feature, try removing this file on the remote host when
+    sshuttle is not running.
+
 .. option:: -N, --auto-nets
 
     In addition to the subnets provided on the command
@@ -104,7 +112,7 @@ Options
 
     Capture local DNS requests and forward to the remote DNS
     server. All queries to any of the local system's DNS
-    servers (/etc/resolv.conf and, if it exists, 
+    servers (/etc/resolv.conf and, if it exists,
     /run/systemd/resolve/resolv.conf) will be intercepted and
     resolved on the remote side of the tunnel instead, there
     using the DNS specified via the :option:`--to-ns` option,
@@ -141,7 +149,10 @@ Options
     The remote hostname and optional username and ssh
     port number to use for connecting to the remote server.
     For example, example.com, testuser@example.com,
-    testuser@example.com:2222, or example.com:2244.
+    testuser@example.com:2222, or example.com:2244. This
+    hostname is passed to ssh, so it will recognize any
+    aliases and settings you may have configured in
+    ~/.ssh/config.
 
 .. option:: -x <subnet>, --exclude=<subnet>
 
@@ -174,7 +185,7 @@ Options
 
     A comma-separated list of hostnames to use to
     initialize the :option:`--auto-hosts` scan algorithm.
-    :option:`--auto-hosts` does things like poll local SMB servers
+    :option:`--auto-hosts` does things like poll netstat output
     for lists of local hostnames, but can speed things up
     if you use this option to give it a few names to start
     from.
@@ -231,8 +242,8 @@ Options
 
 .. option:: --disable-ipv6
 
-    Disable IPv6 support for methods that support it (nft, tproxy, and
-    pf).
+    Disable IPv6 support for methods that support it (nat, nft,
+    tproxy, and pf).
 
 .. option:: --firewall
 
@@ -265,11 +276,13 @@ Options
 
 .. option:: --sudoers-user
 
-    Set the user name or group with %group_name for passwordless operation.
-    Default is the current user.set ALL for all users. Only works with
-    --sudoers or --sudoers-no-modify option.
+    Set the user name or group with %group_name for passwordless
+    operation. Default is the current user. Set to ALL for all users
+    (NOT RECOMMENDED: See note about security in --sudoers-no-modify
+    documentation above). Only works with the --sudoers-no-modify
+    option.
 
-.. option:: --sudoers-filename
+.. option:: -t <mark>, --tmark=<mark>
 
     Set the file name for the sudoers.d file to be added. Default is
     "tshuttle_auto". Only works with --sudoers.
@@ -305,33 +318,69 @@ Arguments read from a file must be one per line, as shown below::
     --option2
     value2
 
+The configuration file supports comments for human-readable
+annotations. For example::
+
+    # company-internal API
+    8.8.8.8/32
+    # home IoT
+    192.168.63.0/24
+
 
 Examples
 --------
-Test locally by proxying all local connections, without using ssh::
+
+Use the following command to route all IPv4 TCP traffic through remote
+(-r) host example.com (and possibly other traffic too, depending on
+the selected --method). The 0/0 subnet, short for 0.0.0.0/0, matches
+all IPv4 addresses. The ::/0 subnet, matching all IPv6 addresses could
+be added to the example. We also exclude (-x) example.com:22 so that
+we can establish ssh connections from our local machine to the remote
+host without them being routed through sshuttle. Excluding the remote
+host may be necessary on some machines for sshuttle to work properly.
+Press Ctrl+C to exit. To also route DNS queries through sshuttle, try
+adding --dns. Add or remove -v options to see more or less
+information::
 
     $ tshuttle -v 0/0
 
     Starting tshuttle proxy.
     Listening on ('0.0.0.0', 12300).
     [local sudo] Password:
-    firewall manager ready.
-    c : connecting to server...
-     s: available routes:
-     s:   192.168.42.0/24
-    c : connected.
-    firewall manager: starting transproxy.
-    c : Accept: 192.168.42.106:50035 -> 192.168.42.121:139.
-    c : Accept: 192.168.42.121:47523 -> 77.141.99.22:443.
-        ...etc...
+    fw: Starting firewall with Python version 3.9.5
+    fw: ready method name nat.
+    c : IPv6 disabled since it isn't supported by method nat.
+    c : Method: nat
+    c : IPv4: on
+    c : IPv6: off (not available with nat method)
+    c : UDP : off (not available with nat method)
+    c : DNS : off (available)
+    c : User: off (available)
+    c : Subnets to forward through remote host (type, IP, cidr mask width, startPort, endPort):
+    c :   (<AddressFamily.AF_INET: 2>, '0.0.0.0', 0, 0, 0)
+    c : Subnets to exclude from forwarding:
+    c :   (<AddressFamily.AF_INET: 2>, '...', 32, 22, 22)
+    c :   (<AddressFamily.AF_INET: 2>, '127.0.0.1', 32, 0, 0)
+    c : TCP redirector listening on ('127.0.0.1', 12299).
+    c : Starting client with Python version 3.9.5
+    c : Connecting to server...
+    user@example.com's password:
+     s: Starting server with Python version 3.6.8
+     s: latency control setting = True
+     s: auto-nets:False
+    c : Connected to server.
+    fw: setting up.
+    fw: iptables -w -t nat -N sshuttle-12299
+    fw: iptables -w -t nat -F sshuttle-12299
+    ...
+    Accept: 192.168.42.121:60554 -> 77.141.99.22:22.
     ^C
-    firewall manager: undoing changes.
-    KeyboardInterrupt
     c : Keyboard interrupt: exiting.
-    c : SW#8:192.168.42.121:47523: deleting
-    c : SW#6:192.168.42.106:50035: deleting
+    c : SW'unknown':Mux#1: deleting (1 remain)
+    c : SW#7:192.168.42.121:60554: deleting (0 remain)
 
-Test connection to a remote server, with automatic hostname
+
+Connect to a remote server, with automatic hostname
 and subnet guessing::
 
     $ tshuttle -vNHr example.org
@@ -342,17 +391,15 @@ and subnet guessing::
     c : connecting to server...
      s: available routes:
      s:   77.141.99.0/24
-    c : connected.
-    c : seed_hosts: []
-    firewall manager: starting transproxy.
-    hostwatch: Found: testbox1: 1.2.3.4
-    hostwatch: Found: mytest2: 5.6.7.8
-    hostwatch: Found: domaincontroller: 99.1.2.3
+    fw: setting up.
+    fw: iptables -w -t nat -N sshuttle-12300
+    fw: iptables -w -t nat -F sshuttle-12300
+    ...
     c : Accept: 192.168.42.121:60554 -> 77.141.99.22:22.
     ^C
-    firewall manager: undoing changes.
     c : Keyboard interrupt: exiting.
-    c : SW#6:192.168.42.121:60554: deleting
+    c : SW'unknown':Mux#1: deleting (1 remain)
+    c : SW#7:192.168.42.121:60554: deleting (0 remain)
 
 Run :program:`tshuttle` with a `/etc/tshuttle.conf` configuration file::
 
@@ -397,7 +444,7 @@ Packet-level forwarding (eg. using the tun/tap devices on
 Linux) seems elegant at first, but it results in
 several problems, notably the 'tcp over tcp' problem.  The
 tcp protocol depends fundamentally on packets being dropped
-in order to implement its congestion control agorithm; if
+in order to implement its congestion control algorithm; if
 you pass tcp packets through a tcp-based tunnel (such as
 ssh), the inner tcp packets will never be dropped, and so
 the inner tcp stream's congestion control will be

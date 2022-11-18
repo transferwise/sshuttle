@@ -101,7 +101,12 @@ you want more control. This option also works with `--sudoers-username`.
 
   tshuttle --sudoers-no-modify
 
-This will simply sprint the generated configuration to STDOUT. Example::
+A custom user or group can be set with the 
+:option:`sshuttle --sudoers-no-modify --sudoers-user {user_descriptor}`
+option. Valid values for this vary based on how your system is configured.
+Values such as usernames, groups pre-pended with `%` and sudoers user 
+aliases will work. See the sudoers manual for more information on valid
+user specif actions. The option must be used with `--sudoers-no-modify`::
 
   08:40 PM william$ tshuttle --sudoers-no-modify
 

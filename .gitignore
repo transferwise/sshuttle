@@ -1,5 +1,6 @@
 /tshuttle/version.py
 /tmp/
+/.coverage
 /.cache/
 /.eggs/
 /.tox/

@@ -37,9 +37,9 @@ def parse_subnetport_file(s):
 def parse_subnetport(s):
 
     if s.count(':') > 1:
-        rx = r'(?:\[?([\w\:]+)(?:/(\d+))?]?)(?::(\d+)(?:-(\d+))?)?$'
+        rx = r'(?:\[?(?:\*\.)?([\w\:]+)(?:/(\d+))?]?)(?::(\d+)(?:-(\d+))?)?$'
     else:
-        rx = r'([\w\.\-]+)(?:/(\d+))?(?::(\d+)(?:-(\d+))?)?$'
+        rx = r'((?:\*\.)?[\w\.\-]+)(?:/(\d+))?(?::(\d+)(?:-(\d+))?)?$'
 
     m = re.match(rx, s)
     if not m:
@@ -132,6 +132,7 @@ def parse_ipport(s):
 
 
 def parse_list(lst):
+    """Parse a comma separated string into a list."""
     return re.split(r'[\s,]+', lst.strip()) if lst else []
 
 
@@ -152,6 +153,10 @@ class Concat(Action):
 # beginning/end of the lines.
 class MyArgumentParser(ArgumentParser):
     def convert_arg_line_to_args(self, arg_line):
+        # Ignore comments
+        if arg_line.startswith("#"):
+            return []
+
         # strip whitespace at beginning and end of line
         arg_line = arg_line.strip()
 
@@ -216,6 +221,7 @@ parser.add_argument(
     type=parse_list,
     help="""
     capture and forward DNS requests made to the following servers
+    (comma separated)
     """
 )
 parser.add_argument(
@@ -276,7 +282,7 @@ parser.add_argument(
     action="count",
     default=0,
     help="""
-    increase debug message verbosity
+    increase debug message verbosity (can be used more than once)
     """
 )
 parser.add_argument(
@@ -391,17 +397,14 @@ parser.add_argument(
     """
 )
 parser.add_argument(
-    "--sudoers",
-    action="store_true",
-    help="""
-    Add tshuttle to the sudoers for this user
-    """
-)
-parser.add_argument(
     "--sudoers-no-modify",
     action="store_true",
     help="""
-    Prints the sudoers config to STDOUT and DOES NOT modify anything.
+    Prints a sudo configuration to STDOUT which allows a user to
+    run sshuttle without a password. This option is INSECURE because,
+    with some cleverness, it also allows the user to run any command
+    as root without a password. The output also includes a suggested
+    method for you to install the configuration.
     """
 )
 parser.add_argument(
@@ -409,16 +412,7 @@ parser.add_argument(
     default="",
     help="""
     Set the user name or group with %%group_name for passwordless operation.
-    Default is the current user.set ALL for all users. Only works with
-    --sudoers or --sudoers-no-modify option.
-    """
-)
-parser.add_argument(
-    "--sudoers-filename",
-    default="tshuttle_auto",
-    help="""
-    Set the file name for the sudoers.d file to be added. Default is
-    "tshuttle_auto". Only works with --sudoers or --sudoers-no-modify option.
+    Default is the current user. Only works with the --sudoers-no-modify option.
     """
 )
 parser.add_argument(
@@ -432,8 +426,9 @@ parser.add_argument(
 parser.add_argument(
     "-t", "--tmark",
     metavar="[MARK]",
-    default="1",
+    default="0x01",
     help="""
-    transproxy optional traffic mark with provided MARK value
+    tproxy optional traffic mark with provided MARK value in
+    hexadecimal (default '0x01')
     """
 )

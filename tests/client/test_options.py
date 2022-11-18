@@ -1,5 +1,6 @@
 import socket
 from argparse import ArgumentTypeError as Fatal
+from unittest.mock import patch
 
 import pytest
 
@@ -25,6 +26,23 @@ _ip6_reprs = {
 }
 
 _ip6_swidths = (48, 64, 96, 115, 128)
+
+
+def _mock_getaddrinfo(host, *_):
+    return {
+        "example.com": [
+            (socket.AF_INET6, socket.SOCK_STREAM, 0, '', ('2606:2800:220:1:248:1893:25c8:1946', 0, 0, 0)),
+            (socket.AF_INET, socket.SOCK_STREAM, 0, '', ('93.184.216.34', 0)),
+        ],
+        "my.local": [
+            (socket.AF_INET6, socket.SOCK_STREAM, 0, '', ('::1', 0, 0, 0)),
+            (socket.AF_INET, socket.SOCK_STREAM, 0, '', ('127.0.0.1', 0)),
+        ],
+        "*.blogspot.com": [
+            (socket.AF_INET6, socket.SOCK_STREAM, 0, '', ('2404:6800:4004:821::2001', 0, 0, 0)),
+            (socket.AF_INET, socket.SOCK_STREAM, 0, '', ('142.251.42.129', 0)),
+        ],
+    }.get(host, [])
 
 
 def test_parse_subnetport_ip4():
@@ -100,3 +118,61 @@ def test_parse_subnetport_ip6_with_mask_and_port():
             == [(socket.AF_INET6, ip, 128, 80, 80)]
         assert tshuttle.options.parse_subnetport('[' + ip_repr + '/16]:80-90')\
             == [(socket.AF_INET6, ip, 16, 80, 90)]
+
+
+def test_convert_arg_line_to_args_skips_comments():
+    parser = tshuttle.options.MyArgumentParser()
+    assert parser.convert_arg_line_to_args("# whatever something") == []
+
+
+@patch('tshuttle.options.socket.getaddrinfo', side_effect=_mock_getaddrinfo)
+def test_parse_subnetport_host(mock_getaddrinfo):
+    assert set(tshuttle.options.parse_subnetport('example.com')) \
+        == set([
+            (socket.AF_INET6, '2606:2800:220:1:248:1893:25c8:1946', 128, 0, 0),
+            (socket.AF_INET, '93.184.216.34', 32, 0, 0),
+        ])
+    assert set(tshuttle.options.parse_subnetport('my.local')) \
+        == set([
+            (socket.AF_INET6, '::1', 128, 0, 0),
+            (socket.AF_INET, '127.0.0.1', 32, 0, 0),
+        ])
+    assert set(tshuttle.options.parse_subnetport('*.blogspot.com')) \
+        == set([
+            (socket.AF_INET6, '2404:6800:4004:821::2001', 128, 0, 0),
+            (socket.AF_INET, '142.251.42.129', 32, 0, 0),
+        ])
+
+
+@patch('tshuttle.options.socket.getaddrinfo', side_effect=_mock_getaddrinfo)
+def test_parse_subnetport_host_with_port(mock_getaddrinfo):
+    assert set(tshuttle.options.parse_subnetport('example.com:80')) \
+        == set([
+            (socket.AF_INET6, '2606:2800:220:1:248:1893:25c8:1946', 128, 80, 80),
+            (socket.AF_INET, '93.184.216.34', 32, 80, 80),
+        ])
+    assert set(tshuttle.options.parse_subnetport('example.com:80-90')) \
+        == set([
+            (socket.AF_INET6, '2606:2800:220:1:248:1893:25c8:1946', 128, 80, 90),
+            (socket.AF_INET, '93.184.216.34', 32, 80, 90),
+        ])
+    assert set(tshuttle.options.parse_subnetport('my.local:445')) \
+        == set([
+            (socket.AF_INET6, '::1', 128, 445, 445),
+            (socket.AF_INET, '127.0.0.1', 32, 445, 445),
+        ])
+    assert set(tshuttle.options.parse_subnetport('my.local:445-450')) \
+        == set([
+            (socket.AF_INET6, '::1', 128, 445, 450),
+            (socket.AF_INET, '127.0.0.1', 32, 445, 450),
+        ])
+    assert set(tshuttle.options.parse_subnetport('*.blogspot.com:80')) \
+        == set([
+            (socket.AF_INET6, '2404:6800:4004:821::2001', 128, 80, 80),
+            (socket.AF_INET, '142.251.42.129', 32, 80, 80),
+        ])
+    assert set(tshuttle.options.parse_subnetport('*.blogspot.com:80-90')) \
+        == set([
+            (socket.AF_INET6, '2404:6800:4004:821::2001', 128, 80, 90),
+            (socket.AF_INET, '142.251.42.129', 32, 80, 90),
+        ])

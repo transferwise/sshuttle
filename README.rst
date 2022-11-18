@@ -40,6 +40,7 @@ Using tshuttle with Teleport
 Example to connect to 192.168.0.0/24 using Teleport JumpHost 1.2.3.4
 
 ::
+
    tshuttle   -e 'tsh ssh'    -r joe.bloggs@1.2.3.4 192.168.0.0/24
    < in a new terminal >
    ssh 192.1689.0.10 # some host in the destination subnet
@@ -56,5 +57,5 @@ https://sshuttle.readthedocs.org/en/latest/
 
 Running as a service
 --------------------
-Sshuttle can also be run as a service and configured using a config management system: 
+Sshuttle can also be run as a service and configured using a config management system:
 https://medium.com/@mike.reider/using-sshuttle-as-a-service-bec2684a65fe

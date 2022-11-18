@@ -1,7 +1,11 @@
 import io
+import os
 from socket import AF_INET, AF_INET6
 
 from unittest.mock import Mock, patch, call
+
+import pytest
+
 import tshuttle.firewall
 
 
@@ -15,7 +19,7 @@ NSLIST
 {inet},1.2.3.33
 {inet6},2404:6800:4004:80c::33
 PORTS 1024,1025,1026,1027
-GO 1 -
+GO 1 - 0x01 12345
 HOST 1.2.3.3,existing
 """.format(inet=AF_INET, inet6=AF_INET6))
     stdout = Mock()
@@ -57,6 +61,21 @@ def test_rewrite_etc_hosts(tmpdir):
     with patch('tshuttle.firewall.HOSTSFILE', new=str(new_hosts)):
         tshuttle.firewall.restore_etc_hosts(hostmap, 10)
     assert orig_hosts.computehash() == new_hosts.computehash()
+
+
+@patch('os.link')
+@patch('os.rename')
+def test_rewrite_etc_hosts_no_overwrite(mock_link, mock_rename, tmpdir):
+    mock_link.side_effect = OSError
+    mock_rename.side_effect = OSError
+
+    with pytest.raises(OSError):
+        os.link('/test_from', '/test_to')
+
+    with pytest.raises(OSError):
+        os.rename('/test_from', '/test_to')
+
+    test_rewrite_etc_hosts(tmpdir)
 
 
 def test_subnet_weight():
@@ -123,17 +142,19 @@ def test_main(mock_get_method, mock_setup_daemon, mock_rewrite_etc_hosts):
             [(AF_INET6, u'2404:6800:4004:80c::33')],
             AF_INET6,
             [(AF_INET6, 64, False, u'2404:6800:4004:80c::', 0, 0),
-                (AF_INET6, 128, True, u'2404:6800:4004:80c::101f', 80, 80)],
+             (AF_INET6, 128, True, u'2404:6800:4004:80c::101f', 80, 80)],
             True,
-            None),
+            None,
+            '0x01'),
         call().setup_firewall(
             1025, 1027,
             [(AF_INET, u'1.2.3.33')],
             AF_INET,
             [(AF_INET, 24, False, u'1.2.3.0', 8000, 9000),
-                (AF_INET, 32, True, u'1.2.3.66', 8080, 8080)],
+             (AF_INET, 32, True, u'1.2.3.66', 8080, 8080)],
             True,
-            None),
+            None,
+            '0x01'),
         call().restore_firewall(1024, AF_INET6, True, None),
         call().restore_firewall(1025, AF_INET, True, None),
     ]

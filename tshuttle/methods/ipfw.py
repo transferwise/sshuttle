@@ -4,63 +4,30 @@ from tshuttle.methods import BaseMethod
 from tshuttle.helpers import log, debug1, debug2, debug3, \
     Fatal, family_to_string, get_env, which
 
-recvmsg = None
-try:
-    # try getting recvmsg from python
-    import socket as pythonsocket
-    getattr(pythonsocket.socket, "recvmsg")
-    socket = pythonsocket
-    recvmsg = "python"
-except AttributeError:
-    # try getting recvmsg from socket_ext library
-    try:
-        import socket_ext
-        getattr(socket_ext.socket, "recvmsg")
-        socket = socket_ext
-        recvmsg = "socket_ext"
-    except ImportError:
-        import socket
+import socket
 
 IP_BINDANY = 24
 IP_RECVDSTADDR = 7
 SOL_IPV6 = 41
 IPV6_RECVDSTADDR = 74
 
-if recvmsg == "python":
-    def recv_udp(listener, bufsize):
-        debug3('Accept UDP python using recvmsg.')
-        data, ancdata, _, srcip = listener.recvmsg(4096,
-                                                   socket.CMSG_SPACE(4))
-        dstip = None
-        for cmsg_level, cmsg_type, cmsg_data in ancdata:
-            if cmsg_level == socket.SOL_IP and cmsg_type == IP_RECVDSTADDR:
-                port = 53
-                ip = socket.inet_ntop(socket.AF_INET, cmsg_data[0:4])
-                dstip = (ip, port)
-                break
-        return (srcip, dstip, data)
-elif recvmsg == "socket_ext":
-    def recv_udp(listener, bufsize):
-        debug3('Accept UDP using socket_ext recvmsg.')
-        srcip, data, adata, _ = listener.recvmsg((bufsize,),
-                                                 socket.CMSG_SPACE(4))
-        dstip = None
-        for a in adata:
-            if a.cmsg_level == socket.SOL_IP and a.cmsg_type == IP_RECVDSTADDR:
-                port = 53
-                ip = socket.inet_ntop(socket.AF_INET, a.cmsg_data[0:4])
-                dstip = (ip, port)
-                break
-        return (srcip, dstip, data[0])
-else:
-    def recv_udp(listener, bufsize):
-        debug3('Accept UDP using recvfrom.')
-        data, srcip = listener.recvfrom(bufsize)
-        return (srcip, None, data)
+
+def recv_udp(listener, bufsize):
+    debug3('Accept UDP python using recvmsg.')
+    data, ancdata, _, srcip = listener.recvmsg(4096,
+                                               socket.CMSG_SPACE(4))
+    dstip = None
+    for cmsg_level, cmsg_type, cmsg_data in ancdata:
+        if cmsg_level == socket.SOL_IP and cmsg_type == IP_RECVDSTADDR:
+            port = 53
+            ip = socket.inet_ntop(socket.AF_INET, cmsg_data[0:4])
+            dstip = (ip, port)
+            break
+    return (srcip, dstip, data)
 
 
 def ipfw_rule_exists(n):
-    argv = ['ipfw', 'list']
+    argv = ['ipfw', 'list', '%d' % n]
     p = ssubprocess.Popen(argv, stdout=ssubprocess.PIPE, env=get_env())
 
     found = False
@@ -70,6 +37,7 @@ def ipfw_rule_exists(n):
                 log('non-tshuttle ipfw rule: %r' % line.strip())
                 raise Fatal('non-tshuttle ipfw rule #%d already exists!' % n)
             found = True
+            break
     rv = p.wait()
     if rv:
         raise Fatal('%r returned %d' % (argv, rv))
@@ -84,7 +52,7 @@ def _fill_oldctls(prefix):
     p = ssubprocess.Popen(argv, stdout=ssubprocess.PIPE, env=get_env())
     for line in p.stdout:
         line = line.decode()
-        assert(line[-1] == '\n')
+        assert line[-1] == '\n'
         (k, v) = line[:-1].split(': ', 1)
         _oldctls[k] = v.strip()
     rv = p.wait()
@@ -106,7 +74,7 @@ _changedctls = []
 
 def sysctl_set(name, val, permanent=False):
     PREFIX = 'net.inet.ip'
-    assert(name.startswith(PREFIX + '.'))
+    assert name.startswith(PREFIX + '.')
     val = str(val)
     if not _oldctls:
         _fill_oldctls(PREFIX)
@@ -177,7 +145,6 @@ class Method(BaseMethod):
         sender.setsockopt(socket.SOL_IP, IP_BINDANY, 1)
         sender.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         sender.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
-        sender.setsockopt(socket.SOL_IP, socket.IP_TTL, 63)
         sender.bind(srcip)
         sender.sendto(data, dstip)
         sender.close()
@@ -189,7 +156,7 @@ class Method(BaseMethod):
         #     udp_listener.v6.setsockopt(SOL_IPV6, IPV6_RECVDSTADDR, 1)
 
     def setup_firewall(self, port, dnsport, nslist, family, subnets, udp,
-                       user):
+                       user, tmark):
         # IPv6 not supported
         if family not in [socket.AF_INET]:
             raise Exception(
@@ -207,8 +174,7 @@ class Method(BaseMethod):
         if subnets or dnsport:
             sysctl_set('net.inet.ip.fw.enable', 1)
 
-        ipfw('add', '1', 'check-state', 'ip',
-             'from', 'any', 'to', 'any')
+        ipfw('add', '1', 'check-state', ':sshuttle')
 
         ipfw('add', '1', 'skipto', '2',
              'tcp',
@@ -216,7 +182,7 @@ class Method(BaseMethod):
         ipfw('add', '1', 'fwd', '127.0.0.1,%d' % port,
              'tcp',
              'from', 'any', 'to', 'table(126)',
-             'not', 'ipttl', '63', 'keep-state', 'setup')
+             'setup', 'keep-state', ':sshuttle')
 
         ipfw_noexit('table', '124', 'flush')
         dnscount = 0
@@ -227,26 +193,24 @@ class Method(BaseMethod):
             ipfw('add', '1', 'fwd', '127.0.0.1,%d' % dnsport,
                  'udp',
                  'from', 'any', 'to', 'table(124)',
-                 'not', 'ipttl', '63')
+                 'keep-state', ':sshuttle')
         ipfw('add', '1', 'allow',
              'udp',
-             'from', 'any', 'to', 'any',
-             'ipttl', '63')
+             'from', 'any', 'to', 'any')
 
         if subnets:
             # create new subnet entries
-            for _, swidth, sexclude, snet in sorted(subnets,
-                                                    key=lambda s: s[1],
-                                                    reverse=True):
+            for _, swidth, sexclude, snet, fport, lport \
+                    in sorted(subnets, key=lambda s: s[1], reverse=True):
                 if sexclude:
                     ipfw('table', '125', 'add', '%s/%s' % (snet, swidth))
-            else:
-                ipfw('table', '126', 'add', '%s/%s' % (snet, swidth))
+                else:
+                    ipfw('table', '126', 'add', '%s/%s' % (snet, swidth))
 
     def restore_firewall(self, port, family, udp, user):
         if family not in [socket.AF_INET]:
             raise Exception(
-                'Address family "%s" unsupported by tproxy method'
+                'Address family "%s" unsupported by ipfw method'
                 % family_to_string(family))
 
         ipfw_noexit('delete', '1')
