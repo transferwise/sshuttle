@@ -6,7 +6,7 @@ from unittest.mock import Mock, patch, call
 
 import pytest
 
-import sshuttle.firewall
+import tshuttle.firewall
 
 
 def setup_daemon():

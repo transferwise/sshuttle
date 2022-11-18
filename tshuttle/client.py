@@ -1064,9 +1064,9 @@ def main(listenip_v6, listenip_v4,
     for subnet_info in subnets_include:
         cidr = subnet_info[1] + "/" + str(subnet_info[2])
         try:
-            ssubprocess.run( 'sudo route -n add -net ' + cidr + ' -interface en0', check = True, shell = True)
+            ssubprocess.run('sudo route -n add -net ' + cidr + ' -interface en0', check=True, shell=True)
         except ssubprocess.CalledProcessError:
-            print ('Failed to add ' + cidr )
+            print('Failed to add ' + cidr)
 
     # start the client process
     try:

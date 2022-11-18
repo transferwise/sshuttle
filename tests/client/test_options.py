@@ -121,57 +121,57 @@ def test_parse_subnetport_ip6_with_mask_and_port():
 
 
 def test_convert_arg_line_to_args_skips_comments():
-    parser = sshuttle.options.MyArgumentParser()
+    parser = tshuttle.options.MyArgumentParser()
     assert parser.convert_arg_line_to_args("# whatever something") == []
 
 
-@patch('sshuttle.options.socket.getaddrinfo', side_effect=_mock_getaddrinfo)
+@patch('tshuttle.options.socket.getaddrinfo', side_effect=_mock_getaddrinfo)
 def test_parse_subnetport_host(mock_getaddrinfo):
-    assert set(sshuttle.options.parse_subnetport('example.com')) \
+    assert set(tshuttle.options.parse_subnetport('example.com')) \
         == set([
             (socket.AF_INET6, '2606:2800:220:1:248:1893:25c8:1946', 128, 0, 0),
             (socket.AF_INET, '93.184.216.34', 32, 0, 0),
         ])
-    assert set(sshuttle.options.parse_subnetport('my.local')) \
+    assert set(tshuttle.options.parse_subnetport('my.local')) \
         == set([
             (socket.AF_INET6, '::1', 128, 0, 0),
             (socket.AF_INET, '127.0.0.1', 32, 0, 0),
         ])
-    assert set(sshuttle.options.parse_subnetport('*.blogspot.com')) \
+    assert set(tshuttle.options.parse_subnetport('*.blogspot.com')) \
         == set([
             (socket.AF_INET6, '2404:6800:4004:821::2001', 128, 0, 0),
             (socket.AF_INET, '142.251.42.129', 32, 0, 0),
         ])
 
 
-@patch('sshuttle.options.socket.getaddrinfo', side_effect=_mock_getaddrinfo)
+@patch('tshuttle.options.socket.getaddrinfo', side_effect=_mock_getaddrinfo)
 def test_parse_subnetport_host_with_port(mock_getaddrinfo):
-    assert set(sshuttle.options.parse_subnetport('example.com:80')) \
+    assert set(tshuttle.options.parse_subnetport('example.com:80')) \
         == set([
             (socket.AF_INET6, '2606:2800:220:1:248:1893:25c8:1946', 128, 80, 80),
             (socket.AF_INET, '93.184.216.34', 32, 80, 80),
         ])
-    assert set(sshuttle.options.parse_subnetport('example.com:80-90')) \
+    assert set(tshuttle.options.parse_subnetport('example.com:80-90')) \
         == set([
             (socket.AF_INET6, '2606:2800:220:1:248:1893:25c8:1946', 128, 80, 90),
             (socket.AF_INET, '93.184.216.34', 32, 80, 90),
         ])
-    assert set(sshuttle.options.parse_subnetport('my.local:445')) \
+    assert set(tshuttle.options.parse_subnetport('my.local:445')) \
         == set([
             (socket.AF_INET6, '::1', 128, 445, 445),
             (socket.AF_INET, '127.0.0.1', 32, 445, 445),
         ])
-    assert set(sshuttle.options.parse_subnetport('my.local:445-450')) \
+    assert set(tshuttle.options.parse_subnetport('my.local:445-450')) \
         == set([
             (socket.AF_INET6, '::1', 128, 445, 450),
             (socket.AF_INET, '127.0.0.1', 32, 445, 450),
         ])
-    assert set(sshuttle.options.parse_subnetport('*.blogspot.com:80')) \
+    assert set(tshuttle.options.parse_subnetport('*.blogspot.com:80')) \
         == set([
             (socket.AF_INET6, '2404:6800:4004:821::2001', 128, 80, 80),
             (socket.AF_INET, '142.251.42.129', 32, 80, 80),
         ])
-    assert set(sshuttle.options.parse_subnetport('*.blogspot.com:80-90')) \
+    assert set(tshuttle.options.parse_subnetport('*.blogspot.com:80-90')) \
         == set([
             (socket.AF_INET6, '2404:6800:4004:821::2001', 128, 80, 90),
             (socket.AF_INET, '142.251.42.129', 32, 80, 90),
